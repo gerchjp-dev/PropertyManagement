@@ -36,7 +36,11 @@ npm install
 #### Option A: Supabase（推奨）
 1. [Supabase](https://supabase.com)でプロジェクト作成
 2. 「Settings」→「API」からURLとAnon keyを取得
-3. 環境変数設定：
+3. `.env`ファイルを作成（`.env.example`をコピー）：
+```bash
+cp .env.example .env
+```
+4. `.env`ファイルに以下を設定：
 ```env
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here
@@ -45,7 +49,11 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 #### Option B: Neon Database（Vercel推奨）
 1. [Neon](https://neon.tech)でプロジェクト作成
 2. PostgreSQL接続文字列を取得
-3. 環境変数設定：
+3. `.env`ファイルを作成（`.env.example`をコピー）：
+```bash
+cp .env.example .env
+```
+4. `.env`ファイルに以下を設定：
 ```env
 VITE_DATABASE_URL=postgresql://username:password@ep-example.us-east-1.aws.neon.tech/dbname?sslmode=require
 ```
@@ -69,118 +77,27 @@ VITE_SQLITE_FILENAME=property_management.db
 
 ### 3. データベーススキーマ作成
 
-#### Supabase / Neon の場合
-以下のSQLを実行してテーブルを作成：
+#### Supabaseの場合
+マイグレーションファイルは既に`supabase/migrations/`フォルダに用意されています。
+テーブルは自動的に作成されているため、追加作業は不要です。
 
+もし手動で確認したい場合は、Supabase Dashboardの「SQL Editor」で以下を実行：
 ```sql
--- 物件テーブル
-CREATE TABLE IF NOT EXISTS mansions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  address TEXT NOT NULL,
-  purchase_date DATE NOT NULL,
-  photo_paths TEXT[] DEFAULT '{}',
-  deed_pdf_path TEXT,
-  total_rooms INTEGER NOT NULL DEFAULT 0,
-  occupancy_rate DECIMAL(5,2) DEFAULT 0,
-  is_deleted BOOLEAN DEFAULT false,
-  deleted_date TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 部屋テーブル
-CREATE TABLE IF NOT EXISTS rooms (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  mansion_id UUID REFERENCES mansions(id) ON DELETE CASCADE,
-  room_number TEXT NOT NULL,
-  layout TEXT NOT NULL,
-  size DECIMAL(6,2) NOT NULL,
-  floor INTEGER NOT NULL,
-  photo_paths TEXT[] DEFAULT '{}',
-  condition_notes TEXT DEFAULT '',
-  is_occupied BOOLEAN DEFAULT false,
-  monthly_rent INTEGER NOT NULL DEFAULT 0,
-  maintenance_fee INTEGER DEFAULT 0,
-  parking_fee INTEGER DEFAULT 0,
-  bicycle_parking_fee INTEGER DEFAULT 0,
-  is_deleted BOOLEAN DEFAULT false,
-  deleted_date TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(mansion_id, room_number)
-);
-
--- 住民テーブル
-CREATE TABLE IF NOT EXISTS residents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
-  name TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  email TEXT NOT NULL,
-  move_in_date DATE NOT NULL,
-  emergency_contact TEXT NOT NULL,
-  user_id TEXT UNIQUE,
-  password TEXT,
-  is_active BOOLEAN DEFAULT true,
-  is_deleted BOOLEAN DEFAULT false,
-  deleted_date TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 業者テーブル
-CREATE TABLE IF NOT EXISTS contractors (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  contact_person TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  email TEXT NOT NULL,
-  address TEXT NOT NULL,
-  specialties TEXT[] DEFAULT '{}',
-  hourly_rate INTEGER DEFAULT 0,
-  rating INTEGER DEFAULT 3 CHECK (rating >= 1 AND rating <= 5),
-  is_active BOOLEAN DEFAULT true,
-  last_work_date DATE,
-  notes TEXT,
-  is_deleted BOOLEAN DEFAULT false,
-  deleted_date TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 修繕記録テーブル
-CREATE TABLE IF NOT EXISTS repair_records (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
-  mansion_id UUID REFERENCES mansions(id) ON DELETE CASCADE,
-  contractor_id UUID REFERENCES contractors(id) ON DELETE SET NULL,
-  scope TEXT NOT NULL CHECK (scope IN ('room', 'building')),
-  description TEXT NOT NULL,
-  request_date DATE NOT NULL,
-  start_date DATE,
-  completion_date DATE,
-  cost INTEGER DEFAULT 0,
-  estimated_cost INTEGER DEFAULT 0,
-  contractor_name TEXT NOT NULL,
-  photo_paths TEXT[] DEFAULT '{}',
-  report_pdf_path TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in-progress', 'completed')),
-  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-  category TEXT NOT NULL DEFAULT 'other' CHECK (category IN ('plumbing', 'electrical', 'interior', 'exterior', 'equipment', 'other')),
-  notes TEXT,
-  is_deleted BOOLEAN DEFAULT false,
-  deleted_date TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- インデックス作成
-CREATE INDEX IF NOT EXISTS idx_rooms_mansion_id ON rooms(mansion_id);
-CREATE INDEX IF NOT EXISTS idx_residents_room_id ON residents(room_id);
-CREATE INDEX IF NOT EXISTS idx_repair_records_mansion_id ON repair_records(mansion_id);
-CREATE INDEX IF NOT EXISTS idx_repair_records_room_id ON repair_records(room_id);
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
 ```
+
+#### Neonの場合
+1. Neon Dashboardの「SQL Editor」にアクセス
+2. `supabase/migrations/20251013160451_20250708130404_small_coast.sql`の内容をコピー＆実行
+3. すべてのテーブル、インデックス、トリガーが作成されます
+
+または、以下の短縮版SQLを実行：
+```sql
+-- 全テーブル確認
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+```
+
+詳細なスキーマは`supabase/migrations/`フォルダを参照してください。
 
 #### SQLite / LibSQL の場合
 設定画面で「DB初期化」ボタンをクリックして自動作成
@@ -190,31 +107,57 @@ CREATE INDEX IF NOT EXISTS idx_repair_records_room_id ON repair_records(room_id)
 npm run dev
 ```
 
-## Vercelデプロイ
+## Vercelデプロイ（埋め込み式）
+
+### 前提条件
+- SupabaseまたはNeonのデータベースを作成済み
+- `.env`ファイルに接続情報を設定済み
 
 ### 1. Vercelプロジェクト作成
 ```bash
 npx vercel
 ```
 
-### 2. 環境変数設定
-Vercelダッシュボードで選択したデータベースの環境変数を設定：
+### 2. 環境変数の埋め込み設定
+Vercelダッシュボード → Settings → Environment Variables で設定：
 
 **Supabase の場合:**
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+| 変数名 | 値 | 例 |
+|--------|-----|-----|
+| `VITE_SUPABASE_URL` | SupabaseプロジェクトURL | `https://xxxxx.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Supabase Anon Key | `eyJhbGc...` |
 
 **Neon の場合:**
-- `VITE_DATABASE_URL`
+| 変数名 | 値 | 例 |
+|--------|-----|-----|
+| `VITE_DATABASE_URL` | Neon接続文字列 | `postgresql://user:pass@ep-xxx.neon.tech/db?sslmode=require` |
 
-**Turso の場合:**
-- `VITE_LIBSQL_URL`
-- `VITE_LIBSQL_AUTH_TOKEN`
+**重要:**
+- すべての環境変数は **Production、Preview、Development** の3つすべてにチェックを入れる
+- `VITE_`プレフィックスが付いた環境変数はビルド時にバンドルに埋め込まれます
+- デプロイ後に環境変数を変更した場合は再デプロイが必要です
 
-### 3. デプロイ
+### 3. データベーススキーマの適用
+
+#### Supabaseの場合
+マイグレーションは既に適用済みなので追加作業は不要です。
+
+#### Neonの場合
+1. Neon Dashboardにログイン
+2. SQL Editor を開く
+3. `supabase/migrations/20251013160451_20250708130404_small_coast.sql` の内容を実行
+4. テーブルが作成されたことを確認
+
+### 4. デプロイ実行
 ```bash
 npx vercel --prod
 ```
+
+### 5. デプロイ確認
+デプロイ後、以下を確認：
+- アプリケーションが正常に起動する
+- データベース接続が成功する（設定画面で接続テスト可能）
+- ログイン機能が動作する
 
 ## 機能
 
@@ -309,8 +252,17 @@ npx vercel --prod
 
 ### 接続エラー
 1. 設定画面で接続テストを実行
-2. 環境変数の確認
+2. 環境変数の確認（`VITE_`プレフィックスが付いているか）
 3. データベースの稼働状況確認
+4. Vercelの場合は再デプロイを試す
+
+### 環境変数が反映されない（Vercel）
+- 環境変数はビルド時に埋め込まれるため、変更後は必ず再デプロイが必要
+- Vercel Dashboard → Deployments → 最新のデプロイ → Redeploy
+
+### データベーステーブルが見つからない
+**Supabase:** マイグレーションが自動適用されているか確認
+**Neon:** SQL Editorでマイグレーションファイルを手動実行
 
 ### データ移行
 異なるプロバイダー間でのデータ移行は手動で行う必要があります。
@@ -319,3 +271,27 @@ npx vercel --prod
 - インデックスの確認
 - クエリの最適化
 - 接続プールの調整
+
+## よくある質問（FAQ）
+
+### Q: データベースはどこに保存されますか？
+**A:** 選択したプロバイダーによります：
+- **Supabase/Neon**: クラウド上のPostgreSQLデータベース
+- **SQLite**: ブラウザのローカルストレージ（開発用のみ）
+- **モック**: メモリ上（ページ更新でリセット）
+
+### Q: 本番環境ではどのデータベースを使うべきですか？
+**A:**
+- **Vercelにデプロイ**: Neon Database（最適化済み、無料枠あり）
+- **認証・ストレージも必要**: Supabase（オールインワン）
+- **グローバル展開**: Turso（エッジ配信）
+
+### Q: 環境変数は安全ですか？
+**A:** `VITE_`プレフィックスの環境変数はクライアント側にバンドルされます。
+- **Anon Key**: 公開OK（RLSで保護）
+- **Service Role Key**: 絶対に使用しない
+- データベース接続文字列は必要に応じてサーバー側で処理してください
+
+### Q: 複数のデータベースを同時に使えますか？
+**A:** いいえ。環境変数の優先順位に従って1つだけが選択されます：
+1. Supabase → 2. Neon → 3. Turso → 4. SQLite → 5. モック
