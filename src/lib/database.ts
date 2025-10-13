@@ -22,112 +22,81 @@ class DatabaseManager {
         this.currentProvider = remoteConfig.provider;
         this.isInitialized = true;
       } else {
-        const localConfig = localStorage.getItem('database-config');
-        if (localConfig) {
-          this.config = JSON.parse(localConfig);
-          this.currentProvider = this.config.provider;
-          await this.saveToSupabase(this.config);
-        } else {
-          this.autoDetectProvider();
-        }
+        await this.autoDetectProvider();
         this.isInitialized = true;
       }
     } catch (error) {
-      console.warn('Failed to load database config from Supabase, using localStorage:', error);
-      try {
-        const localConfig = localStorage.getItem('database-config');
-        if (localConfig) {
-          this.config = JSON.parse(localConfig);
-          this.currentProvider = this.config.provider;
-        } else {
-          this.autoDetectProvider();
-        }
-      } catch (localError) {
-        console.error('Failed to load local config:', localError);
-        this.currentProvider = 'mock';
-      }
-      this.isInitialized = true;
+      console.error('Failed to load database config from Supabase:', error);
+      throw new Error('データベース接続が必要です。Supabaseに接続できません。');
     }
   }
 
   private async loadFromSupabase(): Promise<DatabaseConfig | null> {
-    try {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'database_config')
-        .maybeSingle();
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'database_config')
+      .maybeSingle();
 
-      if (error) {
-        console.error('Error loading config from Supabase:', error);
-        return null;
-      }
-
-      if (data && data.value) {
-        return data.value as DatabaseConfig;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Failed to load from Supabase:', error);
-      return null;
+    if (error) {
+      throw new Error(`Supabase接続エラー: ${error.message}`);
     }
+
+    if (data && data.value) {
+      return data.value as DatabaseConfig;
+    }
+
+    return null;
   }
 
   private async saveToSupabase(config: DatabaseConfig): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('system_settings')
-        .upsert({
-          key: 'database_config',
-          value: config,
-          description: 'Database provider configuration'
-        }, {
-          onConflict: 'key'
-        });
+    const { error } = await supabase
+      .from('system_settings')
+      .upsert({
+        key: 'database_config',
+        value: config,
+        description: 'Database provider configuration'
+      }, {
+        onConflict: 'key'
+      });
 
-      if (error) {
-        console.error('Error saving config to Supabase:', error);
-      }
-    } catch (error) {
-      console.error('Failed to save to Supabase:', error);
+    if (error) {
+      throw new Error(`設定の保存に失敗しました: ${error.message}`);
     }
   }
 
-  private autoDetectProvider() {
+  private async autoDetectProvider() {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
     const neonUrl = import.meta.env.VITE_DATABASE_URL;
     const sqliteFile = import.meta.env.VITE_SQLITE_FILENAME;
 
-    // Supabaseの設定チェック
-    if (supabaseUrl && supabaseKey && 
-        !supabaseUrl.includes('your-project-id') && 
+    if (supabaseUrl && supabaseKey &&
+        !supabaseUrl.includes('your-project-id') &&
         !supabaseKey.includes('your-anon-key')) {
-      this.setProvider('supabase', {
+      await this.setProvider('supabase', {
         supabase: { url: supabaseUrl, anonKey: supabaseKey }
       });
       return;
     }
 
-    // Neonの設定チェック
     if (neonUrl && !neonUrl.includes('your-database-url')) {
-      this.setProvider('neon', {
+      await this.setProvider('neon', {
         neon: { connectionString: neonUrl }
       });
       return;
     }
 
-    // SQLiteの設定チェック
     if (sqliteFile) {
-      this.setProvider('sqlite', {
+      await this.setProvider('sqlite', {
         sqlite: { filename: sqliteFile }
       });
       return;
     }
 
-    // デフォルトはモック
-    this.setProvider('mock');
+    await this.setProvider('supabase', {
+      supabase: { url: supabaseUrl, anonKey: supabaseKey }
+    });
   }
 
   async setProvider(provider: DatabaseProvider, config?: Partial<DatabaseConfig>) {
@@ -136,8 +105,6 @@ class DatabaseManager {
       provider,
       ...config
     };
-
-    localStorage.setItem('database-config', JSON.stringify(this.config));
 
     await this.saveToSupabase(this.config);
 
