@@ -114,7 +114,14 @@ const Settings: React.FC = () => {
       
       await setDatabaseProvider(currentProvider, config);
 
-      alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\n設定はSupabaseに保存されました。変更を反映するにはページを再読み込みしてください。`);
+      if (currentProvider === 'supabase') {
+        const { resetSupabaseClient } = await import('../lib/supabase');
+        resetSupabaseClient(supabaseUrl, supabaseKey);
+      }
+
+      alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\nページを再読み込みして変更を反映します。`);
+
+      window.location.reload();
       
     } catch (error) {
       console.error('Failed to update settings:', error);

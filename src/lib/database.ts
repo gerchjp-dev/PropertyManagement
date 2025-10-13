@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, resetSupabaseClient } from './supabase';
 import { db as neonDb } from './neon';
 import { getSQLiteDatabase, createSQLiteSchema } from './sqlite';
 import { DatabaseProvider, DatabaseConfig } from '../types';
@@ -105,6 +105,10 @@ class DatabaseManager {
       provider,
       ...config
     };
+
+    if (provider === 'supabase' && config?.supabase) {
+      resetSupabaseClient(config.supabase.url, config.supabase.anonKey);
+    }
 
     await this.saveToSupabase(this.config);
 

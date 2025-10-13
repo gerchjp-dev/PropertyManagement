@@ -1,41 +1,55 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Supabaseクライアントの変数宣言
-let supabase;
+let supabaseInstance: SupabaseClient | null = null;
 
-// 環境変数からSupabase設定を取得
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-// デバッグ用（開発時のみ）
-if (import.meta.env.DEV) {
-  console.log('Supabase URL:', supabaseUrl);
-  console.log('Supabase Anon Key:', supabaseAnonKey ? 'Set' : 'Not set');
+function createSupabaseClient(url: string, key: string): SupabaseClient {
+  return createClient(url, key);
 }
 
-// プレースホルダーURLをチェック
-const isPlaceholderUrl = !supabaseUrl || 
-  supabaseUrl.includes('your-project-id') || 
-  supabaseUrl === 'https://your-project-id.supabase.co';
+function getSupabaseClient(): SupabaseClient {
+  if (!supabaseInstance) {
+    const envUrl = import.meta.env.VITE_SUPABASE_URL;
+    const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const isPlaceholderKey = !supabaseAnonKey || 
-  supabaseAnonKey.includes('your-anon-key') || 
-  supabaseAnonKey === 'your-anon-key-here';
+    const isPlaceholderUrl = !envUrl ||
+      envUrl.includes('your-project-id') ||
+      envUrl === 'https://your-project-id.supabase.co';
 
-if (!supabaseUrl || !supabaseAnonKey || isPlaceholderUrl || isPlaceholderKey) {
-  console.warn('⚠️ Supabase設定が未完了です。モックデータを使用します。');
-  console.warn('設定画面でSupabase URLとAnon Keyを設定してください。');
-  
-  // プレースホルダー値でクライアントを作成（実際には使用されない）
-  supabase = createClient(
-    'https://placeholder.supabase.co',
-    'placeholder-key'
-  );
-} else {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const isPlaceholderKey = !envKey ||
+      envKey.includes('your-anon-key') ||
+      envKey === 'your-anon-key-here';
+
+    if (!envUrl || !envKey || isPlaceholderUrl || isPlaceholderKey) {
+      console.warn('⚠️ Supabase設定が未完了です。環境変数を確認してください。');
+      supabaseInstance = createClient(
+        'https://placeholder.supabase.co',
+        'placeholder-key'
+      );
+    } else {
+      supabaseInstance = createClient(envUrl, envKey);
+    }
+  }
+
+  return supabaseInstance;
 }
 
-export { supabase };
+export function resetSupabaseClient(url: string, key: string): void {
+  supabaseInstance = createSupabaseClient(url, key);
+  console.log('Supabase client has been reset with new credentials');
+}
+
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(target, prop) {
+    const client = getSupabaseClient();
+    const value = (client as any)[prop];
+
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+
+    return value;
+  }
+});
 
 // Database types
 export interface Database {
