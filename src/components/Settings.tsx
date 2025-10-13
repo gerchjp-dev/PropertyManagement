@@ -112,20 +112,35 @@ const Settings: React.FC = () => {
           break;
       }
       
-      await setDatabaseProvider(currentProvider, config);
-
       if (currentProvider === 'supabase') {
-        const { resetSupabaseClient } = await import('../lib/supabase');
-        resetSupabaseClient(supabaseUrl, supabaseKey);
+        const { createClient } = await import('@supabase/supabase-js');
+        const tempClient = createClient(supabaseUrl, supabaseKey);
+
+        const { error } = await tempClient
+          .from('system_settings')
+          .upsert({
+            key: 'database_config',
+            value: config,
+            description: 'Database provider configuration'
+          }, {
+            onConflict: 'key'
+          });
+
+        if (error) {
+          throw new Error(`設定の保存に失敗しました: ${error.message}`);
+        }
+
+        alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\n重要: .envファイルも手動で更新してください:\nVITE_SUPABASE_URL=${supabaseUrl}\nVITE_SUPABASE_ANON_KEY=${supabaseKey}\n\nページを再読み込みして変更を反映します。`);
+      } else {
+        await setDatabaseProvider(currentProvider, config);
+        alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\nページを再読み込みして変更を反映します。`);
       }
 
-      alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\nページを再読み込みして変更を反映します。`);
-
       window.location.reload();
-      
+
     } catch (error) {
       console.error('Failed to update settings:', error);
-      alert('❌ 設定の更新に失敗しました。');
+      alert(`❌ 設定の更新に失敗しました。\n\nエラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
     } finally {
       setIsSaving(false);
     }
