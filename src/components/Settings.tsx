@@ -547,25 +547,59 @@ const Settings: React.FC = () => {
             </div>
           </div>
 
-          {/* Current Status */}
-          <div className="mt-6 bg-gray-50 rounded-xl p-6">
-            <h4 className="font-medium text-gray-900 mb-3">現在の設定状況</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">現在のプロバイダー:</span>
-                <span className="font-medium text-gray-900">
-                  {databaseProviders.find(p => p.id === getCurrentDatabaseProvider())?.name}
-                </span>
+          {/* Current Status - Enhanced Real-time Display */}
+          <div className="mt-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
+            <div className="flex items-center space-x-2 mb-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-75"></div>
+                <div className="relative w-3 h-3 bg-green-500 rounded-full"></div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">接続状態:</span>
-                <span className={`font-medium ${
-                  testResult?.success ? 'text-green-600' : 
-                  testResult?.success === false ? 'text-red-600' : 'text-gray-600'
-                }`}>
-                  {testResult?.success ? '接続済み' : 
-                   testResult?.success === false ? '接続失敗' : '未テスト'}
-                </span>
+              <h4 className="font-bold text-gray-900 text-lg">システム稼働状況（リアルタイム）</h4>
+            </div>
+            <div className="space-y-3">
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Database className="h-5 w-5 text-blue-600" />
+                    <span className="text-gray-700 font-medium">現在使用中のデータベース:</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-800 border border-green-300">
+                      ● {databaseProviders.find(p => p.id === getCurrentDatabaseProvider())?.name || '不明'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <span className="text-gray-700 font-medium">接続状態:</span>
+                  </div>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${
+                    testResult?.success ? 'bg-green-100 text-green-800 border border-green-300' :
+                    testResult?.success === false ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-gray-100 text-gray-800 border border-gray-300'
+                  }`}>
+                    {testResult?.success ? '✓ 接続成功' :
+                     testResult?.success === false ? '✗ 接続失敗' : '━ 未テスト'}
+                  </span>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Server className="h-5 w-5 text-purple-600" />
+                    <span className="text-gray-700 font-medium">データベースURL:</span>
+                  </div>
+                  <span className="text-sm font-mono text-gray-600 truncate max-w-xs">
+                    {getCurrentDatabaseProvider() === 'supabase' && supabaseUrl ?
+                      new URL(supabaseUrl).hostname :
+                     getCurrentDatabaseProvider() === 'neon' && neonUrl ?
+                      '●●●●●●●●' :
+                     getCurrentDatabaseProvider() === 'mock' ?
+                      'ローカルメモリ' : '未設定'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
