@@ -112,9 +112,9 @@ const Settings: React.FC = () => {
           break;
       }
       
-      setDatabaseProvider(currentProvider, config);
-      
-      alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\n変更を反映するにはページを再読み込みしてください。`);
+      await setDatabaseProvider(currentProvider, config);
+
+      alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\n設定はSupabaseに保存されました。変更を反映するにはページを再読み込みしてください。`);
       
     } catch (error) {
       console.error('Failed to update settings:', error);
@@ -174,14 +174,14 @@ const Settings: React.FC = () => {
       }
       
       // 一時的に設定を変更
-      setDatabaseProvider(currentProvider, config);
-      
+      await setDatabaseProvider(currentProvider, config);
+
       // 接続テスト実行
       const result = await testDatabaseConnection();
       setTestResult(result);
-      
+
       // 元の設定に戻す
-      setDatabaseProvider(originalProvider);
+      await setDatabaseProvider(originalProvider);
       
     } catch (error) {
       console.error('Connection test failed:', error);

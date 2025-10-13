@@ -7,24 +7,90 @@ import { DatabaseProvider, DatabaseConfig } from '../types';
 class DatabaseManager {
   private currentProvider: DatabaseProvider = 'mock';
   private config: DatabaseConfig = { provider: 'mock' };
+  private isInitialized: boolean = false;
 
   constructor() {
     this.loadConfig();
   }
 
-  private loadConfig() {
+  private async loadConfig() {
     try {
-      const savedConfig = localStorage.getItem('database-config');
-      if (savedConfig) {
-        this.config = JSON.parse(savedConfig);
-        this.currentProvider = this.config.provider;
+      const remoteConfig = await this.loadFromSupabase();
+
+      if (remoteConfig) {
+        this.config = remoteConfig;
+        this.currentProvider = remoteConfig.provider;
+        this.isInitialized = true;
       } else {
-        // 環境変数から自動検出
-        this.autoDetectProvider();
+        const localConfig = localStorage.getItem('database-config');
+        if (localConfig) {
+          this.config = JSON.parse(localConfig);
+          this.currentProvider = this.config.provider;
+          await this.saveToSupabase(this.config);
+        } else {
+          this.autoDetectProvider();
+        }
+        this.isInitialized = true;
       }
     } catch (error) {
-      console.warn('Failed to load database config:', error);
-      this.currentProvider = 'mock';
+      console.warn('Failed to load database config from Supabase, using localStorage:', error);
+      try {
+        const localConfig = localStorage.getItem('database-config');
+        if (localConfig) {
+          this.config = JSON.parse(localConfig);
+          this.currentProvider = this.config.provider;
+        } else {
+          this.autoDetectProvider();
+        }
+      } catch (localError) {
+        console.error('Failed to load local config:', localError);
+        this.currentProvider = 'mock';
+      }
+      this.isInitialized = true;
+    }
+  }
+
+  private async loadFromSupabase(): Promise<DatabaseConfig | null> {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'database_config')
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading config from Supabase:', error);
+        return null;
+      }
+
+      if (data && data.value) {
+        return data.value as DatabaseConfig;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Failed to load from Supabase:', error);
+      return null;
+    }
+  }
+
+  private async saveToSupabase(config: DatabaseConfig): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('system_settings')
+        .upsert({
+          key: 'database_config',
+          value: config,
+          description: 'Database provider configuration'
+        }, {
+          onConflict: 'key'
+        });
+
+      if (error) {
+        console.error('Error saving config to Supabase:', error);
+      }
+    } catch (error) {
+      console.error('Failed to save to Supabase:', error);
     }
   }
 
@@ -64,16 +130,17 @@ class DatabaseManager {
     this.setProvider('mock');
   }
 
-  setProvider(provider: DatabaseProvider, config?: Partial<DatabaseConfig>) {
+  async setProvider(provider: DatabaseProvider, config?: Partial<DatabaseConfig>) {
     this.currentProvider = provider;
     this.config = {
       provider,
       ...config
     };
-    
-    // 設定を保存
+
     localStorage.setItem('database-config', JSON.stringify(this.config));
-    
+
+    await this.saveToSupabase(this.config);
+
     console.log(`Database provider set to: ${provider}`);
   }
 
@@ -185,8 +252,8 @@ export const getDatabaseConfig = (): DatabaseConfig => {
 };
 
 // データベースプロバイダー設定
-export const setDatabaseProvider = (provider: DatabaseProvider, config?: Partial<DatabaseConfig>) => {
-  databaseManager.setProvider(provider, config);
+export const setDatabaseProvider = async (provider: DatabaseProvider, config?: Partial<DatabaseConfig>) => {
+  await databaseManager.setProvider(provider, config);
 };
 
 // データベース接続テスト
