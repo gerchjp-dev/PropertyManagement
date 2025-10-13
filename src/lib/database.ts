@@ -14,73 +14,10 @@ class DatabaseManager {
   }
 
   private async loadConfig() {
-    try {
-      await this.autoDetectProvider();
-
-      const remoteConfig = await this.loadFromSupabase();
-
-      if (remoteConfig) {
-        this.config = remoteConfig;
-        this.currentProvider = remoteConfig.provider;
-
-        if (remoteConfig.provider === 'supabase' && remoteConfig.supabase) {
-          resetSupabaseClient(remoteConfig.supabase.url, remoteConfig.supabase.anonKey);
-        }
-      }
-
-      this.isInitialized = true;
-    } catch (error) {
-      console.error('Failed to load database config:', error);
-      this.isInitialized = true;
-    }
+    await this.autoDetectProvider();
+    this.isInitialized = true;
   }
 
-  private async loadFromSupabase(): Promise<DatabaseConfig | null> {
-    try {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'database_config')
-        .maybeSingle();
-
-      if (error) {
-        console.warn('Could not load config from Supabase:', error.message);
-        return null;
-      }
-
-      if (data && data.value) {
-        return data.value as DatabaseConfig;
-      }
-
-      return null;
-    } catch (error) {
-      console.warn('Failed to connect to Supabase for config:', error);
-      return null;
-    }
-  }
-
-  private async saveToSupabase(config: DatabaseConfig): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('system_settings')
-        .upsert({
-          key: 'database_config',
-          value: config,
-          description: 'Database provider configuration'
-        }, {
-          onConflict: 'key'
-        });
-
-      if (error) {
-        throw new Error(`設定の保存に失敗しました: ${error.message}`);
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error('設定の保存中に不明なエラーが発生しました');
-    }
-  }
 
   private async autoDetectProvider() {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -126,8 +63,6 @@ class DatabaseManager {
     if (provider === 'supabase' && config?.supabase) {
       resetSupabaseClient(config.supabase.url, config.supabase.anonKey);
     }
-
-    await this.saveToSupabase(this.config);
 
     console.log(`Database provider set to: ${provider}`);
   }

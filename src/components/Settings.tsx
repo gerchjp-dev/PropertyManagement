@@ -112,31 +112,20 @@ const Settings: React.FC = () => {
           break;
       }
       
+      await setDatabaseProvider(currentProvider, config);
+
+      let envInstructions = '';
       if (currentProvider === 'supabase') {
-        const { createClient } = await import('@supabase/supabase-js');
-        const tempClient = createClient(supabaseUrl, supabaseKey);
-
-        const { error } = await tempClient
-          .from('system_settings')
-          .upsert({
-            key: 'database_config',
-            value: config,
-            description: 'Database provider configuration'
-          }, {
-            onConflict: 'key'
-          });
-
-        if (error) {
-          throw new Error(`設定の保存に失敗しました: ${error.message}`);
-        }
-
-        alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\n重要: .envファイルも手動で更新してください:\nVITE_SUPABASE_URL=${supabaseUrl}\nVITE_SUPABASE_ANON_KEY=${supabaseKey}\n\nページを再読み込みして変更を反映します。`);
-      } else {
-        await setDatabaseProvider(currentProvider, config);
-        alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。\n\nページを再読み込みして変更を反映します。`);
+        envInstructions = `\n\n.envファイルを以下のように更新してください:\nVITE_SUPABASE_URL=${supabaseUrl}\nVITE_SUPABASE_ANON_KEY=${supabaseKey}`;
+      } else if (currentProvider === 'neon') {
+        envInstructions = `\n\n.envファイルを以下のように更新してください:\nVITE_DATABASE_URL=${neonUrl}`;
+      } else if (currentProvider === 'libsql') {
+        envInstructions = `\n\n.envファイルを以下のように更新してください:\nVITE_LIBSQL_URL=${libsqlUrl}\nVITE_LIBSQL_AUTH_TOKEN=${libsqlToken}`;
+      } else if (currentProvider === 'sqlite') {
+        envInstructions = `\n\n.envファイルを以下のように更新してください:\nVITE_SQLITE_FILENAME=${sqliteFilename}`;
       }
 
-      window.location.reload();
+      alert(`✅ データベースプロバイダーを「${databaseProviders.find(p => p.id === currentProvider)?.name}」に変更しました。${envInstructions}\n\n.envファイルを更新後、ページを再読み込みしてください。`);
 
     } catch (error) {
       console.error('Failed to update settings:', error);
