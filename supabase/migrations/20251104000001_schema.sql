@@ -1,20 +1,12 @@
 /*
-  # 物件管理システム - 完全データベーススキーマ
+  物件管理システム - データベーススキーマ定義
   
-  このSQLファイルをSupabaseのSQL Editorで実行してください。
-  
-  ## 実行順序
-  1. 全体を選択してコピー
-  2. SupabaseのSQL Editorに貼り付け
-  3. 「Run」ボタンで実行
-  
-  ## 含まれる内容
-  - 20個のテーブル作成
-  - RLS（Row Level Security）設定
-  - インデックス作成
+  このファイルには以下が含まれます：
+  - 全テーブル定義
+  - インデックス
+  - トリガー関数
+  - RLS (Row Level Security) 設定
   - 外部キー制約
-  - チェック制約
-  - 自動更新トリガー
 */
 
 -- =============================================================================
@@ -64,7 +56,6 @@ CREATE TABLE IF NOT EXISTS rooms (
     monthly_rent INTEGER NOT NULL DEFAULT 0,
     maintenance_fee INTEGER DEFAULT 0,
     parking_fee INTEGER DEFAULT 0,
-    bicycle_parking_fee INTEGER DEFAULT 0,
     is_deleted BOOLEAN DEFAULT false,
     deleted_date TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -303,7 +294,7 @@ CREATE TABLE IF NOT EXISTS contents (
 -- レポートテーブル
 CREATE TABLE IF NOT EXISTS reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pmc_id UUID NOT NULL, -- 管理会社ID（private.property_management_companiesを参照）
+    pmc_id UUID NOT NULL,
     report_title TEXT NOT NULL,
     report_date DATE,
     description TEXT,
@@ -326,7 +317,7 @@ CREATE TABLE IF NOT EXISTS projects (
     work_content TEXT DEFAULT '',
     required_members INTEGER NOT NULL DEFAULT 1,
     notes TEXT DEFAULT '',
-    lead_member_id UUID, -- membersテーブルを参照（後で外部キー追加）
+    lead_member_id UUID,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -388,7 +379,7 @@ CREATE TABLE IF NOT EXISTS report_files (
     file_name TEXT NOT NULL,
     file_type TEXT,
     file_size INTEGER,
-    uploaded_by_pmc_user_id UUID, -- private.pmc_usersを参照
+    uploaded_by_pmc_user_id UUID,
     uploaded_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -397,9 +388,16 @@ CREATE TABLE IF NOT EXISTS report_files (
 -- =============================================================================
 
 -- プロジェクトのリードメンバー外部キー
-ALTER TABLE projects 
-ADD CONSTRAINT projects_lead_member_id_fkey 
-FOREIGN KEY (lead_member_id) REFERENCES members(id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'projects_lead_member_id_fkey'
+    ) THEN
+        ALTER TABLE projects 
+        ADD CONSTRAINT projects_lead_member_id_fkey 
+        FOREIGN KEY (lead_member_id) REFERENCES members(id);
+    END IF;
+END $$;
 
 -- =============================================================================
 -- 9. インデックス作成
@@ -408,59 +406,89 @@ FOREIGN KEY (lead_member_id) REFERENCES members(id);
 -- 物件関連インデックス
 CREATE INDEX IF NOT EXISTS idx_mansions_name ON mansions(name);
 CREATE INDEX IF NOT EXISTS idx_mansions_address ON mansions(address);
+CREATE INDEX IF NOT EXISTS idx_mansions_deleted ON mansions(is_deleted);
 
 -- 部屋関連インデックス
 CREATE INDEX IF NOT EXISTS idx_rooms_mansion_id ON rooms(mansion_id);
 CREATE INDEX IF NOT EXISTS idx_rooms_occupied ON rooms(is_occupied);
 CREATE INDEX IF NOT EXISTS idx_rooms_rent ON rooms(monthly_rent);
+CREATE INDEX IF NOT EXISTS idx_rooms_deleted ON rooms(is_deleted);
 
 -- 住民関連インデックス
 CREATE INDEX IF NOT EXISTS idx_residents_room_id ON residents(room_id);
 CREATE INDEX IF NOT EXISTS idx_residents_user_id ON residents(user_id);
 CREATE INDEX IF NOT EXISTS idx_residents_active ON residents(is_active);
+CREATE INDEX IF NOT EXISTS idx_residents_deleted ON residents(is_deleted);
 
 -- 契約関連インデックス
 CREATE INDEX IF NOT EXISTS idx_contracts_resident_id ON contracts(resident_id);
 CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
 CREATE INDEX IF NOT EXISTS idx_contracts_end_date ON contracts(end_date);
+CREATE INDEX IF NOT EXISTS idx_contracts_deleted ON contracts(is_deleted);
 
 -- 修繕関連インデックス
 CREATE INDEX IF NOT EXISTS idx_repair_records_mansion_id ON repair_records(mansion_id);
 CREATE INDEX IF NOT EXISTS idx_repair_records_room_id ON repair_records(room_id);
+CREATE INDEX IF NOT EXISTS idx_repair_records_contractor_id ON repair_records(contractor_id);
 CREATE INDEX IF NOT EXISTS idx_repair_records_status ON repair_records(status);
 CREATE INDEX IF NOT EXISTS idx_repair_records_priority ON repair_records(priority);
 CREATE INDEX IF NOT EXISTS idx_repair_records_date ON repair_records(request_date);
+CREATE INDEX IF NOT EXISTS idx_repair_records_category ON repair_records(category);
+CREATE INDEX IF NOT EXISTS idx_repair_records_deleted ON repair_records(is_deleted);
 
 -- 契約ステップ関連インデックス
 CREATE INDEX IF NOT EXISTS idx_contract_steps_contract_id ON contract_steps(contract_id);
 CREATE INDEX IF NOT EXISTS idx_contract_steps_status ON contract_steps(status);
+CREATE INDEX IF NOT EXISTS idx_contract_steps_category ON contract_steps(category);
 
 -- 修繕進捗ステップ関連インデックス
 CREATE INDEX IF NOT EXISTS idx_repair_progress_steps_repair_id ON repair_progress_steps(repair_id);
+CREATE INDEX IF NOT EXISTS idx_repair_progress_steps_status ON repair_progress_steps(status);
 
 -- 住民要望関連インデックス
 CREATE INDEX IF NOT EXISTS idx_resident_requests_resident_id ON resident_requests(resident_id);
+CREATE INDEX IF NOT EXISTS idx_resident_requests_room_id ON resident_requests(room_id);
 CREATE INDEX IF NOT EXISTS idx_resident_requests_status ON resident_requests(status);
 CREATE INDEX IF NOT EXISTS idx_resident_requests_priority ON resident_requests(priority);
+CREATE INDEX IF NOT EXISTS idx_resident_requests_type ON resident_requests(type);
 
 -- 財務記録関連インデックス
 CREATE INDEX IF NOT EXISTS idx_financial_records_date ON financial_records(date);
 CREATE INDEX IF NOT EXISTS idx_financial_records_type ON financial_records(type);
+CREATE INDEX IF NOT EXISTS idx_financial_records_category ON financial_records(category);
+CREATE INDEX IF NOT EXISTS idx_financial_records_room_id ON financial_records(room_id);
 
 -- 支払い記録関連インデックス
 CREATE INDEX IF NOT EXISTS idx_payment_records_payment_date ON payment_records(payment_date);
+CREATE INDEX IF NOT EXISTS idx_payment_records_due_date ON payment_records(due_date);
 CREATE INDEX IF NOT EXISTS idx_payment_records_status ON payment_records(status);
+CREATE INDEX IF NOT EXISTS idx_payment_records_category ON payment_records(category);
 
 -- 通知関連インデックス
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+
+-- 業者関連インデックス
+CREATE INDEX IF NOT EXISTS idx_contractors_active ON contractors(is_active);
+CREATE INDEX IF NOT EXISTS idx_contractors_rating ON contractors(rating);
+CREATE INDEX IF NOT EXISTS idx_contractors_deleted ON contractors(is_deleted);
 
 -- プロジェクト関連インデックス
 CREATE INDEX IF NOT EXISTS idx_projects_date ON projects(date);
 CREATE INDEX IF NOT EXISTS idx_projects_active ON projects(is_active);
+CREATE INDEX IF NOT EXISTS idx_projects_lead_member ON projects(lead_member_id);
 CREATE INDEX IF NOT EXISTS idx_members_active ON members(is_active);
+CREATE INDEX IF NOT EXISTS idx_members_team ON members(team);
 CREATE INDEX IF NOT EXISTS idx_project_assignments_project ON project_member_assignments(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_assignments_member ON project_member_assignments(member_id);
+CREATE INDEX IF NOT EXISTS idx_project_partner_assignments_project ON project_external_partner_assignments(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_partner_assignments_partner ON project_external_partner_assignments(partner_id);
+
+-- レポート関連インデックス
+CREATE INDEX IF NOT EXISTS idx_reports_pmc_id ON reports(pmc_id);
+CREATE INDEX IF NOT EXISTS idx_reports_date ON reports(report_date);
+CREATE INDEX IF NOT EXISTS idx_report_files_report_id ON report_files(report_id);
 
 -- =============================================================================
 -- 10. Row Level Security (RLS) 設定
@@ -484,101 +512,222 @@ ALTER TABLE members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE external_partners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_member_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_external_partner_assignments ENABLE ROW LEVEL SECURITY;
-
--- contentsとreport_filesはRLS無効（パブリックアクセス）
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_files ENABLE ROW LEVEL SECURITY;
 
 -- =============================================================================
 -- 11. RLSポリシー作成
 -- =============================================================================
 
--- 認証ユーザーに全アクセス権限を付与（管理システム用）
-CREATE POLICY "Authenticated users can access mansions" ON mansions FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access rooms" ON rooms FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access residents" ON residents FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access contractors" ON contractors FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access contracts" ON contracts FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access repair_records" ON repair_records FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access financial_records" ON financial_records FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access payment_records" ON payment_records FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access contract_steps" ON contract_steps FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access repair_progress_steps" ON repair_progress_steps FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access resident_requests" ON resident_requests FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated users can access notifications" ON notifications FOR ALL TO authenticated USING (true);
-
--- プロジェクト関連はパブリックアクセス
-CREATE POLICY "Allow all access to projects" ON projects FOR ALL TO public USING (true);
-CREATE POLICY "Allow all access to members" ON members FOR ALL TO public USING (true);
-CREATE POLICY "Allow all access to external_partners" ON external_partners FOR ALL TO public USING (true);
-CREATE POLICY "Allow all access to project_member_assignments" ON project_member_assignments FOR ALL TO public USING (true);
-CREATE POLICY "Allow all access to project_external_partner_assignments" ON project_external_partner_assignments FOR ALL TO public USING (true);
+-- パブリックアクセスポリシー（内部管理システム用）
+DO $$
+BEGIN
+    -- Mansions
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'mansions' AND policyname = 'Public access to mansions') THEN
+        CREATE POLICY "Public access to mansions" ON mansions FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Rooms
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'rooms' AND policyname = 'Public access to rooms') THEN
+        CREATE POLICY "Public access to rooms" ON rooms FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Residents
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'residents' AND policyname = 'Public access to residents') THEN
+        CREATE POLICY "Public access to residents" ON residents FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Contractors
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'contractors' AND policyname = 'Public access to contractors') THEN
+        CREATE POLICY "Public access to contractors" ON contractors FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Contracts
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'contracts' AND policyname = 'Public access to contracts') THEN
+        CREATE POLICY "Public access to contracts" ON contracts FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Repair Records
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'repair_records' AND policyname = 'Public access to repair_records') THEN
+        CREATE POLICY "Public access to repair_records" ON repair_records FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Financial Records
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'financial_records' AND policyname = 'Public access to financial_records') THEN
+        CREATE POLICY "Public access to financial_records" ON financial_records FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Payment Records
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'payment_records' AND policyname = 'Public access to payment_records') THEN
+        CREATE POLICY "Public access to payment_records" ON payment_records FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Contract Steps
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'contract_steps' AND policyname = 'Public access to contract_steps') THEN
+        CREATE POLICY "Public access to contract_steps" ON contract_steps FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Repair Progress Steps
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'repair_progress_steps' AND policyname = 'Public access to repair_progress_steps') THEN
+        CREATE POLICY "Public access to repair_progress_steps" ON repair_progress_steps FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Resident Requests
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'resident_requests' AND policyname = 'Public access to resident_requests') THEN
+        CREATE POLICY "Public access to resident_requests" ON resident_requests FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Notifications
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notifications' AND policyname = 'Public access to notifications') THEN
+        CREATE POLICY "Public access to notifications" ON notifications FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Projects
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'projects' AND policyname = 'Public access to projects') THEN
+        CREATE POLICY "Public access to projects" ON projects FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Members
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'members' AND policyname = 'Public access to members') THEN
+        CREATE POLICY "Public access to members" ON members FOR ALL TO public USING (true);
+    END IF;
+    
+    -- External Partners
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'external_partners' AND policyname = 'Public access to external_partners') THEN
+        CREATE POLICY "Public access to external_partners" ON external_partners FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Project Member Assignments
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'project_member_assignments' AND policyname = 'Public access to project_member_assignments') THEN
+        CREATE POLICY "Public access to project_member_assignments" ON project_member_assignments FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Project External Partner Assignments
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'project_external_partner_assignments' AND policyname = 'Public access to project_external_partner_assignments') THEN
+        CREATE POLICY "Public access to project_external_partner_assignments" ON project_external_partner_assignments FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Reports
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'reports' AND policyname = 'Public access to reports') THEN
+        CREATE POLICY "Public access to reports" ON reports FOR ALL TO public USING (true);
+    END IF;
+    
+    -- Report Files
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'report_files' AND policyname = 'Public access to report_files') THEN
+        CREATE POLICY "Public access to report_files" ON report_files FOR ALL TO public USING (true);
+    END IF;
+END $$;
 
 -- =============================================================================
 -- 12. 自動更新トリガー設定
 -- =============================================================================
 
 -- updated_at自動更新トリガーを全テーブルに設定
-CREATE TRIGGER update_mansions_updated_at BEFORE UPDATE ON mansions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_rooms_updated_at BEFORE UPDATE ON rooms FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_residents_updated_at BEFORE UPDATE ON residents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_contractors_updated_at BEFORE UPDATE ON contractors FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_contracts_updated_at BEFORE UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_repair_records_updated_at BEFORE UPDATE ON repair_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_financial_records_updated_at BEFORE UPDATE ON financial_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_payment_records_updated_at BEFORE UPDATE ON payment_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_contract_steps_updated_at BEFORE UPDATE ON contract_steps FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_repair_progress_steps_updated_at BEFORE UPDATE ON repair_progress_steps FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_resident_requests_updated_at BEFORE UPDATE ON resident_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_notifications_updated_at BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- =============================================================================
--- 13. 初期データ挿入（オプション）
--- =============================================================================
-
--- サンプル物件データ
-INSERT INTO mansions (id, name, address, purchase_date, total_rooms, occupancy_rate) VALUES
-('550e8400-e29b-41d4-a716-446655440000', 'グランドパレス六本木', '東京都港区麻布十番1-2-3', '2020-03-15', 24, 87.5),
-('550e8400-e29b-41d4-a716-446655440001', 'ロイヤルタワー新宿', '東京都新宿区西新宿2-8-1', '2019-11-20', 36, 94.4),
-('550e8400-e29b-41d4-a716-446655440002', 'プレミアムコート渋谷', '東京都渋谷区渋谷3-15-7', '2021-01-10', 18, 83.3),
-('550e8400-e29b-41d4-a716-446655440003', 'エクセレント青山', '東京都港区南青山4-12-8', '2022-05-20', 28, 92.9),
-('550e8400-e29b-41d4-a716-446655440004', 'ラグジュアリー表参道', '東京都渋谷区神宮前5-3-15', '2023-02-10', 22, 86.4)
-ON CONFLICT (id) DO NOTHING;
-
--- サンプル部屋データ
-INSERT INTO rooms (id, mansion_id, room_number, layout, size, floor, monthly_rent, maintenance_fee, is_occupied) VALUES
-('550e8400-e29b-41d4-a716-446655440010', '550e8400-e29b-41d4-a716-446655440000', '101', '1LDK', 45.5, 1, 70000, 10000, true),
-('550e8400-e29b-41d4-a716-446655440011', '550e8400-e29b-41d4-a716-446655440000', '102', '2DK', 52.3, 1, 75000, 12000, false),
-('550e8400-e29b-41d4-a716-446655440012', '550e8400-e29b-41d4-a716-446655440000', '206', '1LDK', 48.2, 2, 72000, 10000, true),
-('550e8400-e29b-41d4-a716-446655440013', '550e8400-e29b-41d4-a716-446655440000', '503', '2LDK', 65.0, 5, 95000, 15000, false)
-ON CONFLICT (id) DO NOTHING;
-
--- サンプル住民データ
-INSERT INTO residents (id, room_id, name, phone, email, move_in_date, emergency_contact, user_id, password, is_active) VALUES
-('550e8400-e29b-41d4-a716-446655440020', '550e8400-e29b-41d4-a716-446655440010', '康井 宏益', '090-1234-5678', 'yasui@example.com', '2023-04-01', '康井 花子 090-8765-4321', 'yasui101', 'password123', true),
-('550e8400-e29b-41d4-a716-446655440021', '550e8400-e29b-41d4-a716-446655440012', '遠里 麻実', '080-2345-6789', 'enri@example.com', '2023-09-15', '遠里 健 080-9876-5432', 'enri206', 'password456', true),
-('550e8400-e29b-41d4-a716-446655440022', '550e8400-e29b-41d4-a716-446655440013', '土橋 正年', '070-3456-7890', 'dobashi@example.com', '2024-01-10', '土橋 美和 070-1234-5678', 'dobashi503', 'password789', false),
-('550e8400-e29b-41d4-a716-446655440023', '550e8400-e29b-41d4-a716-446655440011', '新井 美咲', '080-4567-8901', 'arai@example.com', '2024-12-15', '新井 太郎 080-1111-2222', 'arai102', 'newpass123', true)
-ON CONFLICT (id) DO NOTHING;
-
--- サンプル業者データ
-INSERT INTO contractors (id, name, contact_person, phone, email, address, specialties, hourly_rate, rating, is_active) VALUES
-('550e8400-e29b-41d4-a716-446655440030', '株式会社水道工事', '田中 修理工', '03-1234-5678', 'tanaka@suidou-kouji.co.jp', '東京都港区赤坂1-2-3', '{"plumbing"}', 8000, 4, true),
-('550e8400-e29b-41d4-a716-446655440031', '水道修理プロ', '佐藤 太郎', '03-2345-6789', 'sato@suidou-pro.com', '東京都新宿区西新宿2-1-1', '{"plumbing"}', 7500, 5, true),
-('550e8400-e29b-41d4-a716-446655440032', 'リフォーム株式会社', '鈴木 花子', '03-3456-7890', 'suzuki@reform-corp.co.jp', '東京都渋谷区渋谷3-4-5', '{"interior","exterior"}', 12000, 4, true),
-('550e8400-e29b-41d4-a716-446655440033', '電気工事サービス', '高橋 一郎', '03-4567-8901', 'takahashi@denki-service.com', '東京都品川区大崎1-2-3', '{"electrical"}', 9000, 4, true),
-('550e8400-e29b-41d4-a716-446655440034', 'クリーンサービス東京', '山田 美咲', '03-5678-9012', 'yamada@clean-tokyo.co.jp', '東京都中央区銀座5-6-7', '{"cleaning"}', 3500, 5, true)
-ON CONFLICT (id) DO NOTHING;
-
--- =============================================================================
--- 完了メッセージ
--- =============================================================================
-
--- 作成完了の確認
 DO $$
 BEGIN
-    RAISE NOTICE '✅ 物件管理システムのデータベーススキーマ作成が完了しました！';
-    RAISE NOTICE '📊 作成されたテーブル数: 17';
-    RAISE NOTICE '🔒 RLS設定: 有効';
-    RAISE NOTICE '📈 インデックス: 最適化済み';
-    RAISE NOTICE '🔗 外部キー制約: 設定済み';
-    RAISE NOTICE '⚡ 自動更新トリガー: 設定済み';
+    -- Mansions
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_mansions_updated_at') THEN
+        CREATE TRIGGER update_mansions_updated_at BEFORE UPDATE ON mansions 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Rooms
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_rooms_updated_at') THEN
+        CREATE TRIGGER update_rooms_updated_at BEFORE UPDATE ON rooms 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Residents
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_residents_updated_at') THEN
+        CREATE TRIGGER update_residents_updated_at BEFORE UPDATE ON residents 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Contractors
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_contractors_updated_at') THEN
+        CREATE TRIGGER update_contractors_updated_at BEFORE UPDATE ON contractors 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Contracts
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_contracts_updated_at') THEN
+        CREATE TRIGGER update_contracts_updated_at BEFORE UPDATE ON contracts 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Repair Records
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_repair_records_updated_at') THEN
+        CREATE TRIGGER update_repair_records_updated_at BEFORE UPDATE ON repair_records 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Financial Records
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_financial_records_updated_at') THEN
+        CREATE TRIGGER update_financial_records_updated_at BEFORE UPDATE ON financial_records 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Payment Records
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_payment_records_updated_at') THEN
+        CREATE TRIGGER update_payment_records_updated_at BEFORE UPDATE ON payment_records 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Contract Steps
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_contract_steps_updated_at') THEN
+        CREATE TRIGGER update_contract_steps_updated_at BEFORE UPDATE ON contract_steps 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Repair Progress Steps
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_repair_progress_steps_updated_at') THEN
+        CREATE TRIGGER update_repair_progress_steps_updated_at BEFORE UPDATE ON repair_progress_steps 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Resident Requests
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_resident_requests_updated_at') THEN
+        CREATE TRIGGER update_resident_requests_updated_at BEFORE UPDATE ON resident_requests 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Notifications
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_notifications_updated_at') THEN
+        CREATE TRIGGER update_notifications_updated_at BEFORE UPDATE ON notifications 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Projects
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_projects_updated_at') THEN
+        CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Members
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_members_updated_at') THEN
+        CREATE TRIGGER update_members_updated_at BEFORE UPDATE ON members 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- External Partners
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_external_partners_updated_at') THEN
+        CREATE TRIGGER update_external_partners_updated_at BEFORE UPDATE ON external_partners 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Reports
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_reports_updated_at') THEN
+        CREATE TRIGGER update_reports_updated_at BEFORE UPDATE ON reports 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+    
+    -- Contents
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_contents_updated_at') THEN
+        CREATE TRIGGER update_contents_updated_at BEFORE UPDATE ON contents 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
 END $$;
+
+-- =============================================================================
+-- スキーマ作成完了
+-- =============================================================================
